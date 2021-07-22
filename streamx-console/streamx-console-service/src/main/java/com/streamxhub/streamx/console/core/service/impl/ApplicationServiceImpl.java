@@ -30,6 +30,7 @@ import com.streamxhub.streamx.common.conf.ConfigConst;
 import com.streamxhub.streamx.common.enums.DevelopmentMode;
 import com.streamxhub.streamx.common.enums.ExecutionMode;
 import com.streamxhub.streamx.common.enums.ResolveOrder;
+import com.streamxhub.streamx.common.fs.FsOperator;
 import com.streamxhub.streamx.common.util.*;
 import com.streamxhub.streamx.console.base.domain.Constant;
 import com.streamxhub.streamx.console.base.domain.RestRequest;
@@ -117,6 +118,9 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
 
     @Autowired
     private ApplicationContext context;
+
+    @Autowired
+    private FsOperator fsOperator;
 
     private String PROD_ENV_NAME = "prod";
 
@@ -214,17 +218,17 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
 
     @Override
     public boolean upload(MultipartFile file) throws IOException {
-        String APP_UPLOADS = HdfsUtils.getDefaultFS().concat(ConfigConst.APP_UPLOADS());
+        String APP_UPLOADS = ConfigConst.APP_UPLOADS();
         String uploadFile = APP_UPLOADS.concat("/").concat(Objects.requireNonNull(file.getOriginalFilename()));
         //1)检查文件是否存在,md5是否一致.
-        if (HdfsUtils.exists(uploadFile)) {
+        if (fsOperator.exists(uploadFile)) {
             String md5 = DigestUtils.md5Hex(file.getInputStream());
             //md5一致,则无需在上传.
-            if (md5.equals(HdfsUtils.fileMd5(uploadFile))) {
+            if (md5.equals(fsOperator.fileMd5(uploadFile))) {
                 return true;
             } else {
                 //md5不一致,删除
-                HdfsUtils.delete(uploadFile);
+                fsOperator.delete(uploadFile);
             }
         }
 
@@ -238,7 +242,7 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
         // save file to temp dir
         FileUtils.writeByteArrayToFile(saveFile, file.getBytes());
         //3) 从本地temp目录上传到hdfs
-        HdfsUtils.upload(saveFile.getAbsolutePath(), APP_UPLOADS, true, true);
+        fsOperator.upload(saveFile.getAbsolutePath(), APP_UPLOADS, true, true);
         return true;
     }
 
@@ -270,7 +274,7 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
         assert application != null;
 
         //1) 将已经发布到workspace的文件删除
-        HdfsUtils.delete(application.getAppHome().getAbsolutePath());
+        fsOperator.delete(application.getAppHome().getAbsolutePath());
 
         //2) 将backup里的文件回滚到workspace
         backUpService.revoke(application);
@@ -348,7 +352,7 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
 
     private void removeApp(Long appId) {
         removeById(appId);
-        HdfsUtils.delete(ConfigConst.APP_WORKSPACE().concat("/").concat(appId.toString()));
+        fsOperator.delete(ConfigConst.APP_WORKSPACE().concat("/").concat(appId.toString()));
     }
 
     @Override
@@ -602,10 +606,10 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
                             }
                             // 3) deploying...
                             File appHome = application.getAppHome();
-                            HdfsUtils.delete(appHome.getPath());
+                            fsOperator.delete(appHome.getPath());
                             File localJobHome = new File(application.getLocalAppBase(), application.getModule());
-                            HdfsUtils.upload(localJobHome.getAbsolutePath(), ConfigConst.APP_WORKSPACE(), false, true);
-                            HdfsUtils.movie(ConfigConst.APP_WORKSPACE().concat("/").concat(application.getModule()), appHome.getPath());
+                            fsOperator.upload(localJobHome.getAbsolutePath(), ConfigConst.APP_WORKSPACE());
+                            fsOperator.move(ConfigConst.APP_WORKSPACE().concat("/").concat(application.getModule()), appHome.getPath());
                         } else {
                             log.info("FlinkSqlJob deploying...");
                             FlinkSql flinkSql = flinkSqlService.getCandidate(application.getId(), CandidateType.NEW);
@@ -748,20 +752,20 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
 
             // 3) deploying...
             File appHome = application.getAppHome();
-            HdfsUtils.delete(appHome.getPath());
+            fsOperator.delete(appHome.getPath());
 
             //3) upload jar by pomJar
-            HdfsUtils.delete(application.getAppHome().getAbsolutePath());
+            fsOperator.delete(application.getAppHome().getAbsolutePath());
 
-            HdfsUtils.upload(jobLocalHome.getAbsolutePath(), ConfigConst.APP_WORKSPACE(), false, true);
+            fsOperator.upload(jobLocalHome.getAbsolutePath(), ConfigConst.APP_WORKSPACE());
 
             //4) upload jar by uploadJar
             List<String> jars = application.getDependencyObject().getJar();
-            String APP_UPLOADS = HdfsUtils.getDefaultFS().concat(ConfigConst.APP_UPLOADS());
+            String APP_UPLOADS = ConfigConst.APP_UPLOADS();
             if (Utils.notEmpty(jars)) {
                 jars.forEach(jar -> {
                     String src = APP_UPLOADS.concat("/").concat(jar);
-                    HdfsUtils.copyHdfs(src, application.getAppHome().getAbsolutePath().concat("/lib"), false, true);
+                    fsOperator.copy(src, application.getAppHome().getAbsolutePath().concat("/lib"), false, true);
                 });
             }
 
@@ -906,7 +910,7 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
         }
 
         //1) 真正执行启动相关的操作..
-        String workspace = HdfsUtils.getDefaultFS().concat(ConfigConst.APP_WORKSPACE());
+        String workspace = ConfigConst.APP_WORKSPACE();
 
         String appConf, flinkUserJar;
 
@@ -982,7 +986,7 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
             assert executionMode != null;
             if (executionMode.equals(ExecutionMode.APPLICATION)) {
                 //3) plugin
-                String pluginPath = HdfsUtils.getDefaultFS().concat(ConfigConst.APP_PLUGINS());
+                String pluginPath = ConfigConst.APP_PLUGINS();
                 flinkUserJar = String.format("%s/%s", pluginPath, sqlDistJar);
             } else if (executionMode.equals(ExecutionMode.YARN_PRE_JOB)) {
                 flinkUserJar = sqlDistJar;
@@ -1111,15 +1115,15 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
                 throw new ExceptionInInitializerError("[StreamX] FLINK_HOME is undefined,Make sure that Flink is installed.");
             }
             String appFlink = ConfigConst.APP_FLINK();
-            if (!HdfsUtils.exists(appFlink)) {
+            if (!fsOperator.exists(appFlink)) {
                 log.info("mkdir {} starting ...", appFlink);
-                HdfsUtils.mkdirs(appFlink);
+                fsOperator.mkdirs(appFlink);
             }
             String flinkName = new File(flinkLocalHome).getName();
             String flinkHome = appFlink.concat("/").concat(flinkName);
-            if (!HdfsUtils.exists(flinkHome)) {
+            if (!fsOperator.exists(flinkHome)) {
                 log.info("{} is not exists,upload beginning....", flinkHome);
-                HdfsUtils.upload(flinkLocalHome, flinkHome, false, false);
+                fsOperator.upload(flinkLocalHome, flinkHome, false, false);
             }
         }
     }

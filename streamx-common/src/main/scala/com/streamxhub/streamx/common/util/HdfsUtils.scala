@@ -36,7 +36,7 @@ object HdfsUtils extends Logger {
 
   def list(src: String): List[FileStatus] = HadoopUtils.hdfs.listStatus(getPath(src)).toList
 
-  def movie(src: String, dst: String): Unit = HadoopUtils.hdfs.rename(getPath(src), getPath(dst))
+  def move(src: String, dst: String): Unit = HadoopUtils.hdfs.rename(getPath(src), getPath(dst))
 
   def mkdirs(path: String): Unit = HadoopUtils.hdfs.mkdirs(getPath(path))
 

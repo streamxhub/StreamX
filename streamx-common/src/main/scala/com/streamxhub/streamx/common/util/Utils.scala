@@ -20,6 +20,8 @@
  */
 package com.streamxhub.streamx.common.util
 
+import org.apache.commons.lang.StringUtils
+
 import java.io.{BufferedInputStream, File, FileInputStream, IOException}
 import java.net.URL
 import java.util.jar.{JarFile, JarInputStream}
@@ -82,5 +84,10 @@ object Utils {
   def isLinux: Boolean = OS.indexOf("linux") >= 0
 
   def isWindows: Boolean = OS.indexOf("windows") >= 0
+
+  /**
+   * if any blank strings exist
+   */
+  def isAnyBank(strs: String*): Boolean = strs == null || strs.exists(path => StringUtils.isBlank(path))
 
 }

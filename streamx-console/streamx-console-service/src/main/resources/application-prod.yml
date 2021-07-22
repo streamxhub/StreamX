@@ -67,7 +67,9 @@ mybatis-plus:
 
 streamx:
   # hdfs默认workspace位置(without: hdfs://)
-  hdfs.workspace: /streamx
+  workspace:
+    path: /streamx
+    type: hdfs
 
   shiro:
     # token有效期，单位秒

@@ -26,7 +26,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.streamxhub.streamx.common.conf.ConfigConst;
-import com.streamxhub.streamx.common.util.HdfsUtils;
+import com.streamxhub.streamx.common.fs.FsOperator;
 import com.streamxhub.streamx.console.base.domain.Constant;
 import com.streamxhub.streamx.console.base.domain.RestRequest;
 import com.streamxhub.streamx.console.base.exception.ServiceException;
@@ -55,6 +55,9 @@ public class SavePointServiceImpl extends ServiceImpl<SavePointMapper, SavePoint
 
     @Autowired
     private SettingService settingService;
+
+    @Autowired
+    private FsOperator fsOperator;
 
     @Override
     public void obsolete(Long appId) {
@@ -109,7 +112,7 @@ public class SavePointServiceImpl extends ServiceImpl<SavePointMapper, SavePoint
         SavePoint savePoint = getById(id);
         try {
             if (CommonUtils.notEmpty(savePoint.getPath())) {
-                HdfsUtils.delete(savePoint.getPath());
+                fsOperator.delete(savePoint.getPath());
             }
             removeById(id);
             return true;
@@ -128,6 +131,6 @@ public class SavePointServiceImpl extends ServiceImpl<SavePointMapper, SavePoint
     @Override
     public void removeApp(Long appId) {
         baseMapper.removeApp(appId);
-        HdfsUtils.delete(ConfigConst.APP_SAVEPOINTS().concat("/").concat(appId.toString()));
+        fsOperator.delete(ConfigConst.APP_SAVEPOINTS().concat("/").concat(appId.toString()));
     }
 }
